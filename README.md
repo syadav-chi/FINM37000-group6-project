@@ -1,12 +1,11 @@
 # Pricing the Fed with SOFR Futures
 
-SOFR futures recover the market-implied path of the federal funds rate, sharpest at the next meeting and usually already in the book when the statement is read.
+This project reads CME SOFR futures and recovers the federal-funds path the market was pricing before each FOMC meeting.
 
-On monthly SR1 and SR3 settlements the full model's next-meeting error averages 6.15 bp (bias -0.09 bp; 44 dates, 30 meetings). A simplified curve that ignores meeting dates averages 14.34 bp on those dates (bias -7.06 bp, RMSE 21.76 bp, against the full model's 8.20 bp). On 1,166 daily SR1 dates mean absolute error is 11.34 bp and 13.33 bp. Changes, 572 dates: 9.78 bp versus 25.05 bp. Holds, 594 dates: 12.83 bp versus 2.05 bp. Daily RMSE is 20.77 bp and 20.57 bp. In each pair the full model is first.
-
-Error grows with the horizon. Monthly mean absolute error goes from 6.15 bp one meeting ahead to 54.15 bp at six, and bias from -0.09 bp to -43.36 bp. Next-meeting direction is right on 43 of 44 dates, using a 12.5 bp hike, cut, or hold line.
-
-Of 33 statements from 26 January 2022 through 28 January 2026, 25 moved the front meeting by less than 2 bp from 13:55 to 16:00 Eastern. The largest identified moves were 18 September 2024 (-11.12 bp), 29 October 2025 (+4.49 bp), and 15 June 2022 (+3.77 bp). On 18 September the level went from -37.19 bp at 13:55 to -48.31 bp at 16:00. Databento marks that day degraded (11 contracts, pricing RMSE 0.33 bp).
+- At the next meeting the full model is 6.15 bp vs the simplified curve at 14.34 bp, on 44 monthly dates and 30 meetings. The curve ignores meeting dates.
+- When the Fed changes the target, the full model is 9.78 bp vs the simplified curve at 25.05 bp (572 dates). When the Fed holds, the full model is 12.83 bp vs the simplified curve at 2.05 bp (594 dates).
+- Six meetings out, mean absolute error is 54.15 bp and bias is -43.36 bp, so the futures path sat below the path the Fed delivered.
+- On 25 of 33 days from 26 January 2022 through 28 January 2026, the front meeting moved less than 2 bp from 13:55 to 16:00 Eastern. The largest surprise was 18 September 2024, at -11.12 bp.
 
 ## The question
 
@@ -14,23 +13,27 @@ How much of the Fed's path is already in SOFR futures, and does a calendar-aware
 
 ## Data
 
-The futures are Databento CME Globex `GLBX.MDP3`: SR1 and SR3 settlements from the statistics schema, plus one-minute `ohlcv-1m` bars from 13:00 to 16:00 Eastern on announcement days. Overnight SOFR is the New York Fed fixing. The target range is FRED `DFEDTARL` and `DFEDTARU`. Meetings are the Federal Reserve's scheduled calendar. The settlement window is January 2022 through September 2026. The key is read from `~/.databento_api_key`, then `DATABENTO_API_KEY`. See `DATA.md` and `FED_RATE_DATA.md`.
+The futures are Databento CME Globex `GLBX.MDP3`. SR1 and SR3 settlements come from the statistics schema, not from a daily close. One-minute `ohlcv-1m` bars cover 13:00 to 16:00 Eastern on announcement days. Overnight SOFR is the New York Fed fixing. The target range is FRED `DFEDTARL` and `DFEDTARU`. Meetings are the Federal Reserve's scheduled calendar. The settlement window is January 2022 through September 2026. The key is read from `~/.databento_api_key`, then `DATABENTO_API_KEY`. See `DATA.md` and `FED_RATE_DATA.md`.
 
 ## Method
 
-An SR1 settles to average SOFR in a calendar month, and an SR3 to compounded SOFR between IMM dates. The price is 100 minus that rate. We fix the day's target-range midpoint, set the SOFR-minus-policy basis from up to 20 published fixings, and choose meeting moves by regularized least squares so model prices match the strip. Error is the implied cumulative policy change minus the realized change, in basis points.
+An SR1 settles to average SOFR in a calendar month, and an SR3 to compounded SOFR between IMM dates. The price is 100 minus that rate. We fix the day's target-range midpoint, set the SOFR-minus-policy basis from up to 20 published fixings strictly before the observation date, and choose meeting moves by regularized least squares so model prices match the strip.
 
-The simplified curve bootstraps SR1 with no meeting step. Monthly results use `sofr_pricing.fit_many` on the first futures date of each month (basis on 56 dates, fit on 44, six horizons). The daily table is a separate next-meeting SR1 bootstrap. See `docs/METHODOLOGY.md`, `FORECAST_EVAL.md`, `CURVE_COMPARE.md`, `final_visualizations/VISUALIZATIONS.md`, and `INTRADAY.md`.
+Error is the implied cumulative policy change minus the realized change, in basis points. A negative number means the futures priced a lower path than the Fed delivered.
+
+The simplified curve bootstraps SR1 and puts no step on a meeting date. Monthly results use `sofr_pricing.fit_many` on the first futures date of each month: basis on 56 dates, a fit on 44, and six horizons. The daily table is a separate next-meeting SR1 bootstrap on 1,166 dates. See `docs/METHODOLOGY.md`, `FORECAST_EVAL.md`, `CURVE_COMPARE.md`, `final_visualizations/VISUALIZATIONS.md`, and `INTRADAY.md`.
 
 ## Figures
 
-On 1 April 2022, the first monthly date that fitted, the next meeting was +45.13 bp implied against +50 bp realized. Six meetings out it was +214.82 bp against +400 bp.
+On 1 April 2022 the next meeting was +45.13 bp implied against +50 bp realized, and six meetings out it was +214.82 bp against +400 bp.
 
 ![Path on 1 April 2022](docs/figures/01_fed_paths.png)
 
+Absolute error rises from 6.15 bp at the next meeting to 54.15 bp at six, and direction is right on 43 of 44 dates under a 12.5 bp line.
+
 ![Error by meetings ahead](docs/figures/02_forecast_errors_by_horizon.png)
 
-The third figure is the monthly comparison, 6.15 bp against 14.34 bp. Its right panel splits those 44 dates into changes and holds. The wide hold gap is the daily table, a separate sample.
+The right panel splits the same 44 monthly dates into changes and holds, and it is not the daily hold gap.
 
 ![Monthly full model and simplified curve](docs/figures/03_model_comparison.png)
 
@@ -43,14 +46,22 @@ The third figure is the monthly comparison, 6.15 bp against 14.34 bp. Its right 
 | 5 | 44 | 30 | -34.74 | 46.68 | 63.31 |
 | 6 | 44 | 30 | -43.36 | 54.15 | 73.11 |
 
-| Next meeting | N | Full-model MAE (bp) | Simplified-curve MAE (bp) |
+| Daily next meeting | N | Full model (bp) | Simplified curve (bp) |
 | --- | ---: | ---: | ---: |
-| Target changed | 572 | 9.78 | 25.05 |
-| Target held | 594 | 12.83 | 2.05 |
+| All dates, mean absolute error | 1166 | 11.34 | 13.33 |
+| All dates, bias | 1166 | 0.13 | -6.58 |
+| All dates, RMSE | 1166 | 20.77 | 20.57 |
+| Target changed, mean absolute error | 572 | 9.78 | 25.05 |
+| Target held, mean absolute error | 594 | 12.83 | 2.05 |
 
-Daily bias is +0.13 bp for the full model and -6.58 bp for the simplified curve. Mean simplified-minus-full error is -6.71 bp.
+| Monthly next meeting | Full model (bp) | Simplified curve (bp) |
+| --- | ---: | ---: |
+| Bias | -0.09 | -7.06 |
+| RMSE | 8.20 | 21.76 |
 
-On 15 June 2022 the front meeting was already +70.37 bp at 13:55, before a 75 bp hike. On 29 October 2025 horizons 2 and 3 ended +9.77 and +10.44 bp versus 13:55.
+On 15 June 2022 the book was already +70.37 bp at 13:55, before a 75 bp hike, and the afternoon added +3.77 bp. On 29 October 2025 horizons 2 and 3 ended +9.77 bp and +10.44 bp versus 13:55.
+
+18 September 2024 moved from -37.19 bp at 13:55 to -48.31 bp at 16:00, a change of -11.12 bp, on a degraded print (11 contracts, pricing error 0.33 bp).
 
 ![Three largest announcement afternoons](reports/intraday/real/repricing_paths.png)
 
@@ -80,11 +91,13 @@ Price every Databento pull before downloading, and stop if the quote is above 5 
 
 ```bash
 python scripts/fetch_sofr_futures.py --dry-run
-python scripts/fetch_sofr_futures.py --yes
+python scripts/fetch_sofr_futures.py
 python -m scripts.fetch_rate_data
 python scripts/fetch_intraday_sofr.py --dry-run
 python scripts/fetch_intraday_sofr.py
 ```
+
+The settlement command prints `Total estimated cost` and asks `Proceed with the pull? [y/N]`. Answer n when that total is above 5 dollars. Do not pass `--yes`. That flag skips the question and downloads anyway. The intraday command stops on its own when the quote is above 5 dollars.
 
 `fetch_sofr_futures.py` writes `data/processed/sofr_futures_settlements.parquet`. `fetch_rate_data` writes `data/processed/sofr_daily.csv`, `data/processed/effr_daily.csv`, and `data/processed/fomc_meetings.csv`. `fetch_intraday_sofr.py` writes `data/processed/sofr_intraday_ohlcv_1m.parquet`.
 
@@ -111,7 +124,7 @@ python -m scripts.generate_final_figures \
 
 The horizon table is `figures/historical/forecast_accuracy_by_horizon_formatted.csv`. The monthly full-versus-simplified table is `figures/historical/model_comparison_summary_formatted.csv`.
 
-The daily change-and-hold table is the printout of:
+The daily table is the printout of:
 
 ```bash
 python -m scripts.run_curve_compare_real
@@ -123,7 +136,7 @@ The announcement figure is already at the path the study writes. Regenerate it w
 python scripts/run_intraday_demo.py --real --out reports/intraday/real
 ```
 
-That rewrites `reports/intraday/real/repricing_paths.png` and the tables beside it, including `reports/intraday/real/snapshot_changes.csv`.
+That rewrites `reports/intraday/real/repricing_paths.png` and the summary tables beside it, including `reports/intraday/real/snapshot_changes.csv`.
 
 These four commands need no Databento key and no download. The synthetic intraday charts are a planted jump. Their titles say so, and they are not the historical numbers above.
 
