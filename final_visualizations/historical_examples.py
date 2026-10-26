@@ -102,7 +102,9 @@ def plot_notable_meetings(notable):
     ax.invert_yaxis()
     ax.axvline(0, color = COLORS["gray"], linewidth = 1)
 
-    ax.set_xlabel("Forecast error (bp)")
+    # Two bars are a meeting's mean absolute error and two are its signed
+    # mean bias. One axis title has to cover both.
+    ax.set_xlabel("Meeting-level statistic (bp)")
     ax.set_title("Notable FOMC Forecasting Episodes")
     ax.grid(axis = "x", alpha = 0.3)
 
@@ -118,7 +120,7 @@ def plot_notable_meetings(notable):
                     va = "center",
                     fontsize = 9)
 
-    ax.text(0.5, -0.15, "Historical forecasts; categories may refer to the same meeting. " "Some meetings have only one forecast.", 
+    ax.text(0.5, -0.15, "Historical forecasts; categories may refer to the same meeting. " "Some meetings have only one forecast.",
             transform = ax.transAxes, ha = "center", fontsize = 9, color = COLORS["gray"])
 
     fig.tight_layout()
@@ -139,8 +141,8 @@ def plot_meeting_event_study(errors, meeting_date, horizon = 1):
 
     meeting_date = pd.Timestamp(meeting_date)
 
-    data = data[(data["meeting_date"] == meeting_date) 
-                & (data["horizon"] == horizon) 
+    data = data[(data["meeting_date"] == meeting_date)
+                & (data["horizon"] == horizon)
                 & (data["obs_date"] < meeting_date)].sort_values("obs_date")
 
     if data.empty:
