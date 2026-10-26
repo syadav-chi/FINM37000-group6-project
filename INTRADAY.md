@@ -109,11 +109,11 @@ Files under `reports/intraday/real/`:
 - `repricing_paths.png` — minute path for the three afternoons above, horizons 1–3, with lines at the statement and the press conference.
 - `change_by_horizon.png` — 16:00 minus 13:55, by horizon, one line per announcement. More than eight lines, so the chart has no per-line legend. The note on the figure says the names are in the table.
 - `snapshot_changes.csv` — every meeting at every snapshot, level and change from 13:55.
-- `minute_paths.csv` — minute-by-minute implied rate for horizons 1–3, all 33 dates (16,800 rows). The path figure draws three of them.
+- `minute_paths.csv` — minute-by-minute implied rate for horizons 1–3, all 33 dates (16,800 rows). The path figure draws three of them. The real run writes this file under `reports/intraday/real/`. It is not in the repository. `.gitignore` lists it, and `python scripts/run_intraday_demo.py --real --out reports/intraday/real` regenerates it locally. The full-resolution minute series stays off the public repo because Databento restricts redistribution.
 - `change_by_horizon.csv` — the window-end change table behind the fan.
 - `fit_diagnostics.csv` — rank, condition number, RMSE, convergence, and whether realized SOFR was spliced.
 
-The minute bars themselves stay in gitignored `data/raw/intraday/` and `data/processed/sofr_intraday_ohlcv_1m.parquet`. The Databento key stays in `~/.databento_api_key`. Neither is committed.
+The committed real tables are the snapshot summaries: `snapshot_changes.csv`, `change_by_horizon.csv`, and `fit_diagnostics.csv`, plus the two figures. None of them holds a futures price. The raw bars stay in gitignored `data/raw/intraday/` and `data/processed/sofr_intraday_ohlcv_1m.parquet`. The Databento key stays in `~/.databento_api_key`. The synthetic drill under `reports/intraday/` is planted by the model, not a Databento pull, and its minute file stays in the repo as the method check.
 
 ## Synthetic check
 
@@ -140,7 +140,7 @@ python scripts/run_intraday_demo.py --out reports/intraday
 Real book. The daily SOFR, EFFR, and FOMC files come from `scripts/fetch_rate_data.py` (no Databento key). The minute bars come from `scripts/fetch_intraday_sofr.py`, which quotes `metadata.get_cost` and stops if the quote is above 5 dollars. `--real` only reads the caches. Point it at `reports/intraday/real` so the drill stays put:
 
 ```bash
-python scripts/fetch_rate_data.py
+PYTHONPATH=. python scripts/fetch_rate_data.py
 python scripts/fetch_intraday_sofr.py --dry-run
 python scripts/fetch_intraday_sofr.py
 python scripts/run_intraday_demo.py --real --out reports/intraday/real
