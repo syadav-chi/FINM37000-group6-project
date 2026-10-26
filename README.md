@@ -1,171 +1,135 @@
 # Pricing the Fed with SOFR Futures
 
-## Project Members
+SOFR futures recover the market-implied path of the federal funds rate, sharpest at the next meeting and usually already in the book when the statement is read.
 
-- **Ivy Chan** – Communication Leader
-- **Theo Li** – Design Leader
-- **Maisha Miah** – Tech Leader
-- **Sankalp Yadav** – Design Leader
+On monthly SR1 and SR3 settlements the full model's next-meeting error averages 6.15 bp (bias -0.09 bp; 44 dates, 30 meetings). A simplified curve that ignores meeting dates averages 14.34 bp on those dates (bias -7.06 bp, RMSE 21.76 bp, against the full model's 8.20 bp). On 1,166 daily SR1 dates mean absolute error is 11.34 bp and 13.33 bp. Changes, 572 dates: 9.78 bp versus 25.05 bp. Holds, 594 dates: 12.83 bp versus 2.05 bp. Daily RMSE is 20.77 bp and 20.57 bp. In each pair the full model is first.
 
-## Project Overview
+Error grows with the horizon. Monthly mean absolute error goes from 6.15 bp one meeting ahead to 54.15 bp at six, and bias from -0.09 bp to -43.36 bp. Next-meeting direction is right on 43 of 44 dates, using a 12.5 bp hike, cut, or hold line.
 
-This project studies how accurately SOFR futures prices reflect the market's expectations for future Federal Reserve interest rate decisions.
+Of 33 statements from 26 January 2022 through 28 January 2026, 25 moved the front meeting by less than 2 bp from 13:55 to 16:00 Eastern. The largest identified moves were 18 September 2024 (-11.12 bp), 29 October 2025 (+4.49 bp), and 15 June 2022 (+3.77 bp). On 18 September the level went from -37.19 bp at 13:55 to -48.31 bp at 16:00. Databento marks that day degraded (11 contracts, pricing RMSE 0.33 bp).
 
-Using historical one-month and three-month SOFR futures settlement prices, we will reconstruct the path of the federal funds rate that the futures market was pricing before each FOMC meeting. We will then compare these implied rate paths with the Federal Reserve's actual policy decisions.
+## The question
 
-The main goal is to answer:
-
-> **How accurately do SOFR futures predict the path of Federal Reserve policy rates?**
-
-### Project Scope
-
-The core objective is to have a complete and reproducible analysis of SOFR-implied Federal Reserve expectations. The core analysis will be completed first, while the intraday FOMC announcement study will serve as an optional extension if time permits.
+How much of the Fed's path is already in SOFR futures, and does a calendar-aware model beat a smooth curve?
 
 ## Data
 
-The analysis will use daily market data from approximately 2022 through September 2026.
+The futures are Databento CME Globex `GLBX.MDP3`: SR1 and SR3 settlements from the statistics schema, plus one-minute `ohlcv-1m` bars from 13:00 to 16:00 Eastern on announcement days. Overnight SOFR is the New York Fed fixing. The target range is FRED `DFEDTARL` and `DFEDTARU`. Meetings are the Federal Reserve's scheduled calendar. The settlement window is January 2022 through September 2026. The key is read from `~/.databento_api_key`, then `DATABENTO_API_KEY`. See `DATA.md` and `FED_RATE_DATA.md`.
 
-The main data sources will include:
+## Method
 
-- One-month SOFR futures settlements
-- Three-month SOFR futures settlements
-- FOMC meeting dates
-- Effective Federal Funds Rate (EFFR)
-- Realized Federal Reserve rate decisions
+An SR1 settles to average SOFR in a calendar month, and an SR3 to compounded SOFR between IMM dates. The price is 100 minus that rate. We fix the day's target-range midpoint, set the SOFR-minus-policy basis from up to 20 published fixings, and choose meeting moves by regularized least squares so model prices match the strip. Error is the implied cumulative policy change minus the realized change, in basis points.
 
-The core data source is Databento's CME Globex dataset (`GLBX.MDP3`): daily settlement prices for One-Month (SR1) and Three-Month (SR3) SOFR futures, accessed with the course-provided Databento API key. Daily SOFR and EFFR from the New York Fed and the FOMC meeting calendar are free public supplements.
+The simplified curve bootstraps SR1 with no meeting step. Monthly results use `sofr_pricing.fit_many` on the first futures date of each month (basis on 56 dates, fit on 44, six horizons). The daily table is a separate next-meeting SR1 bootstrap. See `docs/METHODOLOGY.md`, `FORECAST_EVAL.md`, `CURVE_COMPARE.md`, `final_visualizations/VISUALIZATIONS.md`, and `INTRADAY.md`.
 
-The SOFR futures data will be used to estimate the market-implied policy path, while the FOMC and realized rate data will provide the benchmark against which those expectations are evaluated.
+## Figures
 
-### Getting the SOFR futures data
+On 1 April 2022, the first monthly date that fitted, the next meeting was +45.13 bp implied against +50 bp realized. Six meetings out it was +214.82 bp against +400 bp.
 
-The SOFR futures settlement prices are pulled from Databento (`GLBX.MDP3`) by
-`scripts/fetch_sofr_futures.py`:
+![Path on 1 April 2022](docs/figures/01_fed_paths.png)
+
+![Error by meetings ahead](docs/figures/02_forecast_errors_by_horizon.png)
+
+The third figure is the monthly comparison, 6.15 bp against 14.34 bp. Its right panel splits those 44 dates into changes and holds. The wide hold gap is the daily table, a separate sample.
+
+![Monthly full model and simplified curve](docs/figures/03_model_comparison.png)
+
+| Horizon | N | Meetings | Bias (bp) | MAE (bp) | RMSE (bp) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 44 | 30 | -0.09 | 6.15 | 8.20 |
+| 2 | 44 | 30 | -5.57 | 15.12 | 19.75 |
+| 3 | 44 | 30 | -14.27 | 28.24 | 36.09 |
+| 4 | 44 | 30 | -25.27 | 38.51 | 50.59 |
+| 5 | 44 | 30 | -34.74 | 46.68 | 63.31 |
+| 6 | 44 | 30 | -43.36 | 54.15 | 73.11 |
+
+| Next meeting | N | Full-model MAE (bp) | Simplified-curve MAE (bp) |
+| --- | ---: | ---: | ---: |
+| Target changed | 572 | 9.78 | 25.05 |
+| Target held | 594 | 12.83 | 2.05 |
+
+Daily bias is +0.13 bp for the full model and -6.58 bp for the simplified curve. Mean simplified-minus-full error is -6.71 bp.
+
+On 15 June 2022 the front meeting was already +70.37 bp at 13:55, before a 75 bp hike. On 29 October 2025 horizons 2 and 3 ended +9.77 and +10.44 bp versus 13:55.
+
+![Three largest announcement afternoons](reports/intraday/real/repricing_paths.png)
+
+## Limits
+
+Futures prices include risk premia, so an implied move averages over outcomes. A wrong basis falls on the nearest meeting. The fixing calendar is weekdays only. Four afternoons have 7 meetings and rank 6, so the path chart omits them. 17 September 2025 is also degraded and moved +1.45 bp. Five 2026 statements fall after 16 September 2026, the last published meeting.
+
+## Who built it
+
+Maisha Miah built the Databento settlement pipeline (issue 1). Ivy Chan built the FOMC calendar, realized rates, and futures alignment (issues 2 and 14) and the final figures (issue 7). Theo Li built the SR1 and SR3 pricing framework (issue 3) and the Fed-path estimator (issue 4). Sankalp Yadav built the forecast scorecard (issue 5), the full-versus-simplified comparison (issue 6), and the intraday announcement study (issue 8). The original plan is in `PLANNING.md`.
+
+## What is left
+
+Score the daily bootstrap past the next meeting, put its step on the pricing code's next business day, add a holiday calendar, and extend the meeting list past 16 September 2026.
+
+## How to run
+
+Use Python 3.12 or newer. Run the commands from the repository root, after installing the dependencies.
 
 ```bash
-pip install -r requirements.txt
-printf '%s' 'db-YOUR_KEY_HERE' > ~/.databento_api_key && chmod 600 ~/.databento_api_key
-
-python scripts/fetch_sofr_futures.py --dry-run   # estimated cost, no charge
-python scripts/fetch_sofr_futures.py             # the real pull
+python -m pip install -r requirements.txt
 ```
 
-This writes a tidy settlement panel to `data/processed/` and a data quality
-report to `reports/`. The pricing model reads it through one function:
+The Databento key is a single line in `~/.databento_api_key`, mode 600. `sofr_data/config.py` reads that file first and then the `DATABENTO_API_KEY` environment variable. Do not commit the key. Raw and processed market files under `data/` are gitignored.
 
-```python
-from sofr_data import load_settlements, settlement_curve
+Price every Databento pull before downloading, and stop if the quote is above 5 dollars. Cached chunks are not requested again. On this sample, with the caches already present, both quotes printed $0.0000.
 
-panel = load_settlements()
-curve = settlement_curve(panel, "2024-05-30")   # one day's chain, ready to fit
+```bash
+python scripts/fetch_sofr_futures.py --dry-run
+python scripts/fetch_sofr_futures.py --yes
+python -m scripts.fetch_rate_data
+python scripts/fetch_intraday_sofr.py --dry-run
+python scripts/fetch_intraday_sofr.py
 ```
 
-**See [DATA.md](DATA.md)** for the output schema, the SR1 and SR3 settlement
-conventions, the quality checks, and why settlements come from the `statistics`
-schema rather than daily OHLCV.
+`fetch_sofr_futures.py` writes `data/processed/sofr_futures_settlements.parquet`. `fetch_rate_data` writes `data/processed/sofr_daily.csv`, `data/processed/effr_daily.csv`, and `data/processed/fomc_meetings.csv`. `fetch_intraday_sofr.py` writes `data/processed/sofr_intraday_ohlcv_1m.parquet`.
 
-## Methodology
+The monthly horizon table, the monthly comparison, and the three figures in `docs/figures/` come from the commands below. `figures/` is gitignored, so the plot command writes `figures/historical/`. The README embeds the copies committed at `docs/figures/01_fed_paths.png`, `docs/figures/02_forecast_errors_by_horizon.png`, and `docs/figures/03_model_comparison.png`.
 
-A key challenge is that SOFR futures contracts do not directly report the expected federal funds rate at individual FOMC meetings.
+```bash
+python -m scripts.prepare_historical_forecasts \
+  --futures data/processed/sofr_futures_settlements.parquet \
+  --sofr data/processed/sofr_daily.csv \
+  --decisions data/processed/fomc_meetings.csv \
+  --output-dir data/processed/visualizations
+python -m scripts.prepare_visualization_inputs \
+  --implied data/processed/visualizations/implied_forecasts.csv \
+  --decisions data/processed/fomc_meetings.csv \
+  --output-dir data/processed/visualizations
+python -m scripts.prepare_historical_comparison
+python -m scripts.generate_final_figures \
+  --errors data/processed/visualizations/forecast_errors.csv \
+  --decisions data/processed/fomc_meetings.csv \
+  --comparison data/processed/visualizations/model_comparison.csv \
+  --obs-date 2022-04-01 \
+  --output-dir figures/historical
+```
 
-The contracts have different settlement conventions:
+The horizon table is `figures/historical/forecast_accuracy_by_horizon_formatted.csv`. The monthly full-versus-simplified table is `figures/historical/model_comparison_summary_formatted.csv`.
 
-- **One-month SOFR futures** settle based on the average SOFR rate during a calendar month.
-- **Three-month SOFR futures** settle based on compounded SOFR over a reference period running from one IMM date to the next (not a calendar quarter).
+The daily change-and-hold table is the printout of:
 
-We will build a curve-fitting procedure that converts these futures prices into an implied path for short-term interest rates. The model will estimate the sequence of Federal Reserve rate changes that best reproduces the observed futures prices while respecting the settlement conventions of each contract.
+```bash
+python -m scripts.run_curve_compare_real
+```
 
-This allows us to recover the market-implied expected Fed policy path on each trading day in the sample.
+The announcement figure is already at the path the study writes. Regenerate it with:
 
-The current policy rate is taken from observed data, the SOFR-policy-rate basis is held fixed, and the meeting moves are estimated by regularized least squares on futures price residuals. The full derivation, assumptions, and limitations are in [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+```bash
+python scripts/run_intraday_demo.py --real --out reports/intraday/real
+```
 
-## Evaluation
+That rewrites `reports/intraday/real/repricing_paths.png` and the tables beside it, including `reports/intraday/real/snapshot_changes.csv`.
 
-After estimating the implied Fed path, we will compare the market's predictions with what the Federal Reserve actually did.
+These four commands need no Databento key and no download. The synthetic intraday charts are a planted jump. Their titles say so, and they are not the historical numbers above.
 
-Forecast accuracy will be evaluated across approximately **38 FOMC meetings**, with forecasts measured at horizons of **1 to 6 meetings ahead**.
-
-For each horizon, we can calculate measures such as:
-
-- Forecast error in basis points
-- Mean absolute error (MAE)
-- Bias in market expectations
-- Changes in forecast accuracy as the FOMC meeting approaches
-
-Forecast errors are computed on cumulative policy-rate changes through each meeting horizon, so the SOFR-policy-rate basis cancels out. Because futures prices may include risk premia, results are described as market-implied expectations rather than pure forecasts.
-
-As an additional validation exercise, we can compare futures-implied rates with the final realized settlement values of expired contracts.
-
-## Comparison with a Simplified Approach
-
-We will also compare our methodology with a simplified SOFR curve-building approach similar to the one described in the course materials.
-
-This comparison will help measure the importance of correctly accounting for the timing of FOMC meetings and the exact settlement conventions of SOFR futures. Both methods are re-priced through the same SR1/SR3 contract pricing functions so their fits are compared on equal terms.
-
-In particular, we will examine whether a simplified smooth curve fails to capture the **step-like behavior of policy rates around FOMC meetings**.
-
-## Potential Extension: FOMC Announcement Reactions
-
-The intraday extension fits the market-implied Fed path before and after FOMC announcements and shows its minute-by-minute change. See [INTRADAY.md](INTRADAY.md) for the data requirements, commands, and limitations.
-
-With real minute bars, the analysis can measure:
-
-- The size of the market reaction to an announcement
-- Which future FOMC meetings experience the largest repricing
-- How quickly SOFR futures incorporate new monetary policy information
-
-The core historical analysis can be completed independently of this extension.
-
-## Expected Output
-
-The final project will produce:
-
-1. A historical series of market-implied Fed rate paths.
-2. Visualizations comparing implied and realized Fed policy rates.
-3. Forecast-error statistics for different forecast horizons.
-4. A comparison between the full methodology and a simplified SOFR curve approach.
-5. If completed, an intraday analysis of market reactions to FOMC announcements.
-
-## Repository Layout
-
-| Path | Contents |
-| --- | --- |
-| `sofr_data/` | Data collection and cleaning package |
-| `scripts/fetch_sofr_futures.py` | Pulls and cleans the SOFR futures data |
-| `tests/` | Tests, runnable without a Databento key |
-| `data/` | Pulled and processed data (gitignored) |
-| `reports/` | Generated data quality reports |
-| `DATA.md` | SOFR futures data dictionary and conventions |
-
-## Project Roadmap
-
-The project will be developed in the following stages, with detailed tasks and progress tracked through GitHub Issues:
-
-1. Collect and clean SOFR futures data, see [DATA.md](DATA.md). ([#1](https://github.com/mmiah00/FINM37000-group6-project/issues/1))
-2. Collect FOMC meeting and realized rate data. ([#2](https://github.com/mmiah00/FINM37000-group6-project/issues/2))
-3. Build the SOFR futures pricing framework. ([#3](https://github.com/mmiah00/FINM37000-group6-project/issues/3))
-4. Estimate market-implied Fed rate paths. ([#4](https://github.com/mmiah00/FINM37000-group6-project/issues/4))
-5. Evaluate Fed-path forecast accuracy. ([#5](https://github.com/mmiah00/FINM37000-group6-project/issues/5)) See [FORECAST_EVAL.md](FORECAST_EVAL.md).
-6. Compare the full model with a simplified curve methodology. ([#6](https://github.com/mmiah00/FINM37000-group6-project/issues/6)) See [CURVE_COMPARE.md](CURVE_COMPARE.md).
-7. Create final visualizations and analysis. ([#7](https://github.com/mmiah00/FINM37000-group6-project/issues/7))
-8. Analyze intraday FOMC announcement reactions. ([#8](https://github.com/mmiah00/FINM37000-group6-project/issues/8)) See [INTRADAY.md](INTRADAY.md).
-
-## Team and Issue Ownership
-
-| Member | Role | Issues |
-| --- | --- | --- |
-| Maisha Miah | Tech Leader | [#1](https://github.com/mmiah00/FINM37000-group6-project/issues/1) (Databento data and repo setup) |
-| Ivy Chan | Communication Leader | [#2](https://github.com/mmiah00/FINM37000-group6-project/issues/2), [#7](https://github.com/mmiah00/FINM37000-group6-project/issues/7) |
-| Theo Li | Design Leader | [#3](https://github.com/mmiah00/FINM37000-group6-project/issues/3), [#4](https://github.com/mmiah00/FINM37000-group6-project/issues/4) |
-| Sankalp Yadav | Design Leader | [#5](https://github.com/mmiah00/FINM37000-group6-project/issues/5), [#6](https://github.com/mmiah00/FINM37000-group6-project/issues/6) |
-
-## How to Run
-
-*Status: SOFR futures data collection (see [Getting the SOFR futures data](#getting-the-sofr-futures-data) and [DATA.md](DATA.md)), FOMC meeting data, SR1/SR3 pricing, path estimation, and the issue #5 forecast evaluation (see [FORECAST_EVAL.md](FORECAST_EVAL.md)) are implemented. The issue #6 comparison against a simplified SOFR curve (see [CURVE_COMPARE.md](CURVE_COMPARE.md)) runs on synthetic data without the course package or a Databento key, and that guide also records the real-data script. The issue #7 figures and historical workflow are described in [final_visualizations/VISUALIZATIONS.md](final_visualizations/VISUALIZATIONS.md); the published comparison is the methodology-basis rerun. The intraday study is in [INTRADAY.md](INTRADAY.md). Follow the linked guides to run each stage.*
-
-1. Use Python 3.12 or newer.
-2. Install the project dependencies, including the course package [`finm37000`](https://github.com/pattersonem/finm37000-autumn-2026).
-3. Save the course-provided Databento API key in `~/.databento_api_key`, the location the course package reads it from.
-4. Run the stages in roadmap order: data collection, pricing, path estimation, evaluation, and figures.
-
-Check the cost of any Databento request before downloading. Raw Databento data is not committed to the repository.
+```bash
+python -m scripts.run_forecast_eval_demo
+python -m scripts.run_curve_compare_demo
+python scripts/run_intraday_demo.py --out reports/intraday
+python -m pytest -q
+```
