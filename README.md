@@ -67,7 +67,7 @@ On 15 June 2022 the book was already +70.37 bp at 13:55, before a 75 bp hike, an
 
 ## Limits
 
-Futures prices include risk premia, so an implied move averages over outcomes. A wrong basis falls on the nearest meeting. The fixing calendar is weekdays only. Four afternoons have 7 meetings and rank 6, so the path chart omits them. 17 September 2025 is also degraded and moved +1.45 bp. Five 2026 statements fall after 16 September 2026, the last published meeting.
+Futures prices include risk premia, so an implied move averages over outcomes. A wrong basis falls on the nearest meeting. The fixing calendar is weekdays only. Four afternoons have 7 meetings and rank 6, so the path chart omits them. 17 September 2025 is also degraded and moved +1.45 bp. Five later 2026 meetings are excluded from the intraday fit because their contract strips need meetings beyond the calendar's last date, 16 September 2026.
 
 ## Who built it
 
